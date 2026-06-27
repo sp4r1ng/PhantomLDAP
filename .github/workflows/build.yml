@@ -1,0 +1,282 @@
+name: PhantomLDAP CI — BOF Cross-Compilation
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'Makefile'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [ created ]
+
+# Cancel in-progress runs when a new push is made to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CC: x86_64-w64-mingw32-gcc
+  LD: x86_64-w64-mingw32-ld
+
+jobs:
+  # ===========================================================================
+  # Build Job — Cross-compile all BOF modules with MinGW-w64
+  # ===========================================================================
+  build:
+    name: Build BOF Modules (x86_64-w64-mingw32)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install MinGW-w64 cross-compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            mingw-w64 \
+            gcc-mingw-w64-x86-64 \
+            binutils-mingw-w64-x86-64
+          x86_64-w64-mingw32-gcc --version
+          x86_64-w64-mingw32-ld --version
+
+      - name: Verify project structure
+        run: |
+          echo "=== Project Layout ==="
+          find . -name "*.c" -o -name "*.h" -o -name "Makefile" | sort
+          echo ""
+          echo "=== Header Files ==="
+          ls -la include/
+
+      - name: Build all BOF modules
+        run: |
+          make all 2>&1 | tee build.log
+          echo "Exit code: $?"
+
+      - name: Verify build artifacts
+        run: |
+          echo "=== Build Artifacts ==="
+          ls -la build/*.o
+          echo ""
+          echo "=== File size analysis ==="
+          for f in build/*.o; do
+            SIZE=$(wc -c < "$f")
+            echo "  $(basename $f): ${SIZE} bytes"
+            if [ "$SIZE" -gt 262144 ]; then
+              echo "  [WARNING] $(basename $f) exceeds 256KB — may be too large for some C2 frameworks"
+            fi
+          done
+
+      - name: Validate BOF format (check for go() entry point)
+        run: |
+          echo "=== Checking for 'go' symbol in each BOF ==="
+          FAILED=0
+          for f in build/*.o; do
+            if x86_64-w64-mingw32-nm "$f" 2>/dev/null | grep -q "T go$\|T _go$"; then
+              echo "  [OK] $(basename $f) — 'go' entry point found"
+            else
+              echo "  [FAIL] $(basename $f) — 'go' entry point NOT found!"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "[ERROR] One or more BOF files are missing the 'go' entry point."
+            exit 1
+          fi
+
+      - name: Check for forbidden IAT imports (wldap32, static LDAP refs)
+        run: |
+          echo "=== Checking for forbidden static imports ==="
+          FAILED=0
+          for f in build/*.o; do
+            # Check for direct wldap32 import symbol
+            if x86_64-w64-mingw32-nm "$f" 2>/dev/null | grep -qi "__imp_ldap\|__imp_wldap"; then
+              echo "  [FAIL] $(basename $f) contains static LDAP IAT import!"
+              x86_64-w64-mingw32-nm "$f" | grep -i "__imp_ldap\|__imp_wldap"
+              FAILED=1
+            else
+              echo "  [OK] $(basename $f) — no static LDAP IAT imports"
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "[ERROR] IAT imports found. This defeats dynamic resolution and may trigger EDR detection."
+            exit 1
+          fi
+
+      - name: Verify hash constants (Python)
+        run: |
+          python3 scripts/gen_hashes.py --verify --output include/dynamic_resolve.h
+
+      - name: Generate BOF statistics report
+        if: always()
+        run: |
+          echo "# PhantomLDAP Build Report" > build_report.md
+          echo "" >> build_report.md
+          echo "| Module | Size (bytes) | go() Found | IAT Clean |" >> build_report.md
+          echo "|:-------|:------------:|:----------:|:---------:|" >> build_report.md
+          for f in build/*.o; do
+            NAME=$(basename "$f" .o)
+            SIZE=$(wc -c < "$f")
+            HAS_GO=$(x86_64-w64-mingw32-nm "$f" 2>/dev/null | grep -c "T go$" || echo 0)
+            IAT_CLEAN=$(x86_64-w64-mingw32-nm "$f" 2>/dev/null | grep -ci "__imp_ldap" && echo "❌" || echo "✅")
+            GO_MARK=$([ "$HAS_GO" -gt 0 ] && echo "✅" || echo "❌")
+            echo "| \`$NAME\` | $SIZE | $GO_MARK | $IAT_CLEAN |" >> build_report.md
+          done
+          cat build_report.md
+
+      - name: Upload BOF artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phantom-ldap-bof-${{ github.sha }}
+          path: |
+            build/*.o
+            build_report.md
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-log-${{ github.sha }}
+          path: build.log
+          retention-days: 7
+
+  # ===========================================================================
+  # Verify Job — Validate code style and documentation
+  # ===========================================================================
+  verify:
+    name: Verify Code Quality
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for hardcoded credentials or keys
+        run: |
+          echo "=== Scanning for hardcoded secrets ==="
+          FOUND=0
+          # Check for obvious patterns (passwords, API keys, etc.)
+          if grep -rn "password\s*=\s*[\"'][^\"']\+[\"']\|api.key\s*=\|secret\s*=\s*[\"']" src/ include/ 2>/dev/null; then
+            FOUND=1
+          fi
+          if [ "$FOUND" -eq 1 ]; then
+            echo "[WARNING] Possible hardcoded sensitive data detected. Please review."
+          else
+            echo "[OK] No hardcoded credentials detected."
+          fi
+
+      - name: Validate Sigma rules (YAML syntax)
+        run: |
+          pip install -q pyyaml 2>/dev/null || true
+          echo "=== Validating Sigma YAML files ==="
+          for f in docs/detection/*.yml; do
+            python3 -c "
+          import yaml, sys
+          with open('$f') as fp:
+              doc = yaml.safe_load(fp)
+          required = ['title', 'status', 'description', 'logsource', 'detection']
+          missing = [k for k in required if k not in doc]
+          if missing:
+              print(f'[WARN] $f missing fields: {missing}')
+          else:
+              print(f'[OK]  $f')
+            " 2>&1 || echo "[WARN] Could not validate $f"
+          done
+
+      - name: Check documentation completeness
+        run: |
+          echo "=== Documentation Completeness Check ==="
+          DOCS=("README.md" "docs/ARCHITECTURE.md" "docs/OPSEC.md" "docs/DETECTION.md" "docs/DEVELOPMENT.md")
+          for doc in "${DOCS[@]}"; do
+            if [ -f "$doc" ]; then
+              LINES=$(wc -l < "$doc")
+              echo "  [OK] $doc ($LINES lines)"
+            else
+              echo "  [MISSING] $doc"
+            fi
+          done
+
+  # ===========================================================================
+  # Release Job — Publish compiled BOFs on GitHub Release
+  # ===========================================================================
+  release:
+    name: Publish Release Artifacts
+    runs-on: ubuntu-latest
+    needs: [ build, verify ]
+    if: github.event_name == 'release' && github.event.action == 'created'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mingw-w64 binutils-mingw-w64-x86-64
+
+      - name: Build release BOFs
+        run: make all
+
+      - name: Package release artifacts
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          PKG="phantom-ldap-${VERSION}"
+          mkdir -p "$PKG/bof" "$PKG/cna" "$PKG/docs"
+          
+          cp build/*.o "$PKG/bof/"
+          cp cna/*.cna  "$PKG/cna/"
+          cp docs/*.md  "$PKG/docs/"
+          cp README.md LICENSE "$PKG/"
+          
+          # Create SHA256 checksums
+          sha256sum "$PKG/bof/"*.o > "$PKG/SHA256SUMS.txt"
+          cat "$PKG/SHA256SUMS.txt"
+          
+          # Archive
+          tar czf "${PKG}.tar.gz" "$PKG/"
+          zip -r  "${PKG}.zip"    "$PKG/"
+          
+          echo "PACKAGE_NAME=${PKG}" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            phantom-ldap-${{ env.VERSION }}.tar.gz
+            phantom-ldap-${{ env.VERSION }}.zip
+          body: |
+            ## PhantomLDAP ${{ env.VERSION }}
+            
+            ### Included BOF Modules
+            | Module | Description |
+            |--------|-------------|
+            | `enum_admins.o` | Enumerate adminCount=1 protected accounts |
+            | `enum_spn.o` | Kerberoastable accounts (SPN enumeration) |
+            | `enum_asrep.o` | AS-REP Roasting targets |
+            | `enum_computers.o` | Computer objects with OS analysis |
+            | `enum_trusts.o` | Domain trust enumeration |
+            | `enum_gpo.o` | Group Policy Object enumeration |
+            | `enum_acl.o` | DACL binary parsing and ACE analysis |
+            | `ldap_query.o` | Custom LDAP filter injection |
+            
+            ### Installation
+            1. Unzip to your Cobalt Strike directory
+            2. Load `cna/phantom_ldap.cna` via Script Manager
+            3. All commands available as `bof_*` in Beacon console
+            
+            ### SHA256 Checksums
+            See `SHA256SUMS.txt` in the archive.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
