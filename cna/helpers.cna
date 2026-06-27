@@ -1,0 +1,361 @@
+﻿# =============================================================================
+# PhantomLDAP — helpers.cna
+# =============================================================================
+#
+# PURPOSE
+#   Shared utility library sourced by phantom_ldap.cna before any other CNA
+#   file.  All helper subroutines and event hooks live here so that
+#   phantom_ldap.cna and menus.cna stay focused on command dispatch and UI.
+#
+# CONTENTS
+#   · Global constants (suite version, BOF output path prefix, console tag)
+#   · load_bof_or_fail       — safe BOF binary loader with actionable errors
+#   · phantom_log_banner     — formatted ASCII-art banner to beacon console
+#   · validate_beacon        — sanity-check a beacon ID before job dispatch
+#   · scope_to_int           — LDAP scope string → integer constant
+#   · format_dc_arg          — normalise optional DC argument
+#   · phantom_opsec_warn     — per-module OPSEC advisory to operator log
+#   · phantom_pack_query     — canonical argument packer for bof_ldap_query
+#   · on beacon_initial      — domain-join detection hook
+#
+# AUTHOR   PhantomLDAP Project
+# VERSION  1.0.0
+# LICENSE  Operator use only — not for redistribution
+# =============================================================================
+
+
+# ---------------------------------------------------------------------------
+# § 1. Global Constants
+#
+#   All globals are prefixed with PHANTOM_ to avoid collisions with other
+#   loaded CNA scripts on the same teamserver.
+# ---------------------------------------------------------------------------
+
+# Suite version — keep synchronised with PHANTOM_VERSION_STR in phantom_ldap.h
+global('$PHANTOM_VERSION');
+$PHANTOM_VERSION = "1.0.0";
+
+# Path from this CNA file's directory to compiled BOF object files.
+# script_resource() resolves relative to the directory containing the CNA.
+global('$PHANTOM_BOF_DIR');
+$PHANTOM_BOF_DIR = "../build/";
+
+# Console tag prefixed to all operator-log (elog) messages.
+# \c9 = Cobalt Strike light-blue colour code; \o = colour reset.
+global('$PHANTOM_TAG');
+$PHANTOM_TAG = "\c9[PhantomLDAP]\o";
+
+# Hash tracking which (bid, module) pairs have already received an OPSEC
+# advisory during this CS session, preventing log spam.
+global('%_phantom_warned');
+
+
+# =============================================================================
+# § 2. load_bof_or_fail($bid, $module_name)
+# =============================================================================
+#
+# DESCRIPTION
+#   Attempt to read a compiled BOF object from the build directory.
+#   On failure, write actionable error messages to both the beacon console
+#   (berror) and the teamserver operator log (elog).
+#
+# PARAMETERS
+#   $1  $bid          — Beacon ID that will execute the BOF
+#   $2  $module_name  — Short module name WITHOUT extension (e.g. "enum_spn")
+#
+# RETURN
+#   Binary blob ready for beacon_inline_execute(), or $null on failure.
+#
+# EXAMPLE
+#   $data = load_bof_or_fail($bid, "enum_spn");
+#   if ($data is $null) { return; }
+#
+sub load_bof_or_fail {
+    local('$bid $module_name $path $data');
+    ($bid, $module_name) = @_;
+
+    # Construct path: <cna_directory>/../build/<module_name>.o
+    $path = script_resource($PHANTOM_BOF_DIR . $module_name . ".o");
+
+    $data = readb($path);
+
+    if ($data is $null) {
+        # Beacon console: operator can immediately see what failed.
+        berror($bid, "[!] PhantomLDAP: Cannot load BOF module '" . $module_name . ".o'");
+        berror($bid, "[!] Expected path : " . $path);
+        berror($bid, "[!] Fix           : run  make all  in the PhantomLDAP directory.");
+        berror($bid, "[!] Prerequisite  : x86_64-w64-mingw32-gcc must be on PATH.");
+
+        # Operator / event log so all team members on the teamserver see it.
+        elog($PHANTOM_TAG . " \ceMissing BOF:\o " . $module_name .
+             ".o — run 'make all' (bid=" . $bid . ")");
+
+        return $null;
+    }
+
+    return $data;
+}
+
+
+# =============================================================================
+# § 3. phantom_log_banner($bid)
+# =============================================================================
+#
+# DESCRIPTION
+#   Print a short PhantomLDAP suite banner to a beacon's console.
+#   Call this once per command invocation so output is easily attributed
+#   when multiple BOFs are running in parallel on a busy teamserver.
+#
+# PARAMETERS
+#   $1  $bid  — Beacon ID to write the banner to
+#
+sub phantom_log_banner {
+    local('$bid');
+    $bid = $1;
+
+    blog($bid,
+        "\n" .
+        "  ╔══════════════════════════════════════════════════════════════════════╗\n" .
+        "  ║          P H A N T O M L D A P   v" . $PHANTOM_VERSION . "                          ║\n" .
+        "  ║  OpSec-Safe Active Directory Enumeration BOF Suite                  ║\n" .
+        "  ║  wldap32.dll: PEB walk  |  No IAT entries  |  RFC-2696 paging       ║\n" .
+        "  ╚══════════════════════════════════════════════════════════════════════╝"
+    );
+}
+
+
+# =============================================================================
+# § 4. validate_beacon($bid)
+# =============================================================================
+#
+# DESCRIPTION
+#   Perform a basic sanity-check on a beacon ID before dispatching a BOF job.
+#   Cobalt Strike returns $null for unknown or dead beacons — catching this
+#   early produces a clear error instead of a confusing crash in
+#   beacon_inline_execute.
+#
+# PARAMETERS
+#   $1  $bid  — Beacon ID to check
+#
+# RETURN
+#   $true if the beacon ID is known and alive, $false otherwise.
+#
+sub validate_beacon {
+    local('$bid $info');
+    $bid = $1;
+
+    if ($bid is $null || $bid eq "") {
+        warn("[PhantomLDAP] validate_beacon: called with null or empty bid");
+        return $false;
+    }
+
+    # beacon_info() returns $null for beacons not in the session table.
+    $info = beacon_info($bid, "id");
+    if ($info is $null) {
+        warn("[PhantomLDAP] validate_beacon: bid " . $bid . " not found");
+        return $false;
+    }
+
+    return $true;
+}
+
+
+# =============================================================================
+# § 5. scope_to_int($scope_str)
+# =============================================================================
+#
+# DESCRIPTION
+#   Convert a human-readable LDAP scope keyword into the integer constant
+#   consumed by the BOF argument bundle.
+#
+#   Mapping (mirrors ldap.h LDAP_SCOPE_* values):
+#     "base"    → 0   LDAP_SCOPE_BASE      — search only the base object
+#     "one"     → 1   LDAP_SCOPE_ONELEVEL  — search one level below base
+#     "subtree" → 2   LDAP_SCOPE_SUBTREE   — search entire subtree (default)
+#
+# PARAMETERS
+#   $1  $scope_str  — One of "base", "one", "subtree" (case-insensitive)
+#
+# RETURN
+#   Integer 0, 1, or 2.  Unknown strings default to 2 (subtree).
+#
+sub scope_to_int {
+    local('$s');
+    $s = lc($1);   # lowercase so "Subtree", "SUBTREE", etc. all work
+
+    if ($s eq "base")    { return 0; }
+    if ($s eq "one")     { return 1; }
+    if ($s eq "subtree") { return 2; }
+
+    return 2;   # safe default: full subtree
+}
+
+
+# =============================================================================
+# § 6. format_dc_arg($raw_arg)
+# =============================================================================
+#
+# DESCRIPTION
+#   Normalise the optional domain-controller argument accepted by every module.
+#   When omitted the BOF interprets an empty wide-string as "auto-discover
+#   the current domain's DC" via the DsGetDcName / rootDSE path.
+#
+# PARAMETERS
+#   $1  $raw_arg  — Value from command-line (may be $null, "" or a hostname/IP)
+#
+# RETURN
+#   Trimmed DC hostname string, or "" if the argument was absent or null.
+#
+sub format_dc_arg {
+    local('$raw');
+    $raw = $1;
+
+    if ($raw is $null) { return ""; }
+
+    # Strip accidental surrounding whitespace.
+    $raw = ["$raw" trim];
+
+    return $raw;
+}
+
+
+# =============================================================================
+# § 7. phantom_opsec_warn($bid, $module_name, $filter_hint)
+# =============================================================================
+#
+# DESCRIPTION
+#   Write a brief OPSEC advisory to the Cobalt Strike operator event log.
+#   Output goes to elog() (NOT the beacon console) to avoid extra round-trips
+#   to the implant.  The advisory is emitted at most once per unique
+#   ($bid, $module_name) pair per CS session to prevent log spam.
+#
+# PARAMETERS
+#   $1  $bid          — Beacon ID (used to pull target metadata for context)
+#   $2  $module_name  — Short module identifier, e.g. "enum_spn"
+#   $3  $filter_hint  — LDAP filter string or other distinguishing detail
+#
+sub phantom_opsec_warn {
+    local('$bid $module_name $filter_hint $key $computer $user $domain');
+    ($bid, $module_name, $filter_hint) = @_;
+
+    $key = $bid . ":" . $module_name;
+
+    # Guard: warn once per session per (bid, module) combination.
+    if (%_phantom_warned[$key]) { return; }
+    %_phantom_warned[$key] = 1;
+
+    # Pull beacon metadata for the advisory context line.
+    $computer = beacon_info($bid, "computer");
+    $user     = beacon_info($bid, "user");
+    $domain   = beacon_info($bid, "domain");
+
+    elog(
+        $PHANTOM_TAG . " \ceOPSEC Advisory\o — Module: " . $module_name . "\n" .
+        "    Target  : " . $user . "@" . $computer . " (domain: " . $domain . ")\n" .
+        "    Filter  : " . $filter_hint . "\n" .
+        "    Vectors : Event 1644 (expensive LDAP search logging, if enabled);\n" .
+        "              LDAP traffic on TCP/389 (or 636 for LDAPS);\n" .
+        "              Event 4662 Directory Service Access on sensitive objects;\n" .
+        "              Network IDS rules for LDAP filter strings."
+    );
+}
+
+
+# =============================================================================
+# § 8. phantom_pack_query($bid, $filter, $attrs, $dc, $scope_str, $base_dn)
+# =============================================================================
+#
+# DESCRIPTION
+#   Build the packed argument blob for the bof_ldap_query BOF's go() entry
+#   point.  Centralised here so both the alias handler in phantom_ldap.cna
+#   and the menus.cna "Custom LDAP Query" item share identical packing, making
+#   it trivial to update the layout if the BOF signature changes.
+#
+#   BOF parameter layout (must match datap_read order in ldap_query.c go()):
+#     Position 1 — Z (wide string) : LDAP filter
+#     Position 2 — Z (wide string) : comma-separated attribute list
+#     Position 3 — Z (wide string) : DC hostname (empty = auto)
+#     Position 4 — i (int32)       : LDAP scope integer (0/1/2)
+#     Position 5 — Z (wide string) : base DN override (empty = rootDSE)
+#
+# PARAMETERS
+#   $1  $bid        — Beacon ID (required by bof_pack internals)
+#   $2  $filter     — LDAP filter string  (e.g. "(&(objectClass=user)(adminCount=1))")
+#   $3  $attrs      — Comma-separated attributes (e.g. "sAMAccountName,memberOf")
+#   $4  $dc         — DC hostname or "" for auto-discovery
+#   $5  $scope_str  — "base" | "one" | "subtree"
+#   $6  $base_dn    — Base DN override or "" for rootDSE default
+#
+# RETURN
+#   Binary packed argument blob ready for beacon_inline_execute().
+#
+sub phantom_pack_query {
+    local('$bid $filter $attrs $dc $scope_str $base_dn $scope_int');
+    ($bid, $filter, $attrs, $dc, $scope_str, $base_dn) = @_;
+
+    $scope_int = scope_to_int($scope_str);
+
+    # bof_pack format string: each character maps to one argument.
+    #   Z = wide (UTF-16LE) zero-terminated string
+    #   i = 32-bit little-endian signed integer
+    return bof_pack($bid, "ZZZiZ",
+        $filter,
+        $attrs,
+        $dc,
+        $scope_int,
+        $base_dn
+    );
+}
+
+
+# =============================================================================
+# § 9. Event Hook — on beacon_initial
+# =============================================================================
+#
+# DESCRIPTION
+#   Fires exactly once for every new beacon that checks in.  If the target
+#   machine reports as domain-joined (Cobalt Strike metadata flag
+#   "-isdomainjoined"), print an advisory to the beacon console suggesting
+#   the operator use PhantomLDAP for initial AD enumeration.
+#
+# DESIGN DECISIONS
+#   · No BOF is auto-executed — this would be unexpected and potentially noisy.
+#   · Output goes to blog() (beacon console) so the message is in the correct
+#     beacon's log rather than a generic teamserver popup.
+#   · Non-domain-joined beacons: silently ignored (no output).
+#   · Only fires on beacon_initial, NOT on beacon_reconnect, to avoid
+#     repeating the advisory every time a long-running beacon re-taskes.
+#
+on beacon_initial {
+    local('$bid $computer $user $domain $os');
+    $bid = $1;
+
+    if (-isdomainjoined $bid) {
+        $computer = beacon_info($bid, "computer");
+        $user     = beacon_info($bid, "user");
+        $domain   = beacon_info($bid, "domain");
+        $os       = beacon_info($bid, "os");
+
+        blog($bid,
+            "\n" .
+            $PHANTOM_TAG . " \c9Domain-joined target detected!\o\n" .
+            "  ┌─────────────────────────────────────────────────┐\n" .
+            "  │  Host   : " . $computer . "\n" .
+            "  │  User   : " . $user . "\n" .
+            "  │  Domain : " . $domain . "\n" .
+            "  │  OS     : " . $os . "\n" .
+            "  └─────────────────────────────────────────────────┘\n" .
+            "\n" .
+            "  Recommended enumeration sequence:\n" .
+            "    1. bof_phantom_help                — list all modules\n" .
+            "    2. bof_enum_admins                 — adminCount=1 accounts\n" .
+            "    3. bof_enum_spn                    — Kerberoastable accounts\n" .
+            "    4. bof_enum_asrep                  — AS-REP Roastable accounts\n" .
+            "    5. bof_enum_computers              — domain computers + OS\n" .
+            "    6. bof_enum_trusts                 — domain trust map\n" .
+            "    7. bof_enum_gpo                    — Group Policy Objects\n" .
+            "    8. bof_enum_acl <dn>               — DACL analysis (specific object)\n" .
+            "    9. bof_ldap_query <filter> <attrs> — custom ad-hoc query\n"
+        );
+    }
+}

@@ -1,0 +1,34 @@
+title: AS-REP Roasting Target Enumeration via LDAP Filter
+id: c6f3e4a2-1d5b-4c3f-9e2a-4f9d7c8b3e2f
+status: experimental
+description: |
+  Detects LDAP searches using the LDAP_MATCHING_RULE_BIT_AND (OID 1.2.840.113556.1.4.803)
+  against userAccountControl bit 0x400000 (= 4194304 = DONT_REQUIRE_PREAUTH).
+  This is the exact filter used by AS-REP Roasting enumeration tools including
+  PhantomLDAP (bof_enum_asrep), Impacket GetNPUsers, and Rubeus asreproast.
+  Requires Event ID 1644 enabled on Domain Controllers.
+author: PhantomLDAP Detection Project
+date: 2024-01-15
+modified: 2024-06-01
+references:
+  - https://attack.mitre.org/techniques/T1558/004/
+  - https://docs.microsoft.com/en-us/troubleshoot/windows-server/networking/events-1644-active-directory-requests
+tags:
+  - attack.credential_access
+  - attack.t1558.004
+logsource:
+  product: windows
+  service: directory-service
+  category: ldap
+detection:
+  selection:
+    EventID: 1644
+    SearchFilter|contains|all:
+      - '1.2.840.113556.1.4.803'
+      - '4194304'
+  condition: selection
+falsepositives:
+  - Authorized penetration testing
+  - Authorized vulnerability scanning tools
+  - Security audit scripts with explicit approval
+level: high

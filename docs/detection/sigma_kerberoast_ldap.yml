@@ -1,0 +1,36 @@
+title: Kerberoasting SPN Enumeration via LDAP
+id: e8b5d2c4-3f7a-4e2b-9d1c-6a8f0b5e3d7c
+status: experimental
+description: |
+  Detects LDAP searches that enumerate accounts with Service Principal Names (SPNs),
+  the prerequisite for Kerberoasting. The filter (servicePrincipalName=*) combined
+  with user account class filters identifies automated SPN reconnaissance as performed
+  by PhantomLDAP (bof_enum_spn), Impacket GetUserSPNs, and Rubeus kerberoast.
+  Requires Event ID 1644 enabled on Domain Controllers.
+author: PhantomLDAP Detection Project
+date: 2024-01-15
+modified: 2024-06-01
+references:
+  - https://attack.mitre.org/techniques/T1558/003/
+  - https://adsecurity.org/?p=3458
+tags:
+  - attack.credential_access
+  - attack.t1558.003
+logsource:
+  product: windows
+  service: directory-service
+  category: ldap
+detection:
+  selection_spn:
+    EventID: 1644
+    SearchFilter|contains: 'servicePrincipalName=*'
+  selection_user_scope:
+    SearchFilter|contains:
+      - 'objectClass=user'
+      - 'objectCategory=person'
+  condition: selection_spn and selection_user_scope
+falsepositives:
+  - Authorized penetration testing
+  - AD health check scripts monitoring SPN configuration
+  - LDAP-based service management platforms
+level: high

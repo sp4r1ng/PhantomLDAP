@@ -1,0 +1,44 @@
+title: Suspicious LDAP Enumeration from Non-Server Process
+id: a4f3c1e2-8b2d-4f1a-9c3e-2d7b5a9f8e6c
+status: experimental
+description: |
+  Detects LDAP queries (port 389/636) initiated by processes that are not
+  typical Active Directory administration tools. May indicate BOF-based AD
+  enumeration tools like PhantomLDAP operating from an injected Beacon.
+author: PhantomLDAP Detection Project
+date: 2024-01-15
+modified: 2024-06-01
+tags:
+  - attack.discovery
+  - attack.t1069.002
+  - attack.t1087.002
+  - attack.t1482
+logsource:
+  product: windows
+  category: network_connection
+  service: sysmon
+detection:
+  selection:
+    EventID: 3
+    DestinationPort:
+      - 389
+      - 636
+  filter_legitimate:
+    Image|contains:
+      - '\mmc.exe'
+      - '\LDP.exe'
+      - '\powershell.exe'
+      - '\outlook.exe'
+      - '\svchost.exe'
+      - '\lsass.exe'
+      - '\ADWS.exe'
+      - '\Microsoft.ActiveDirectory.WebServices.exe'
+      - '\dsquery.exe'
+      - '\dsget.exe'
+      - '\nltest.exe'
+  condition: selection and not filter_legitimate
+falsepositives:
+  - Custom LDAP-capable third-party applications
+  - Administrative scripts using the Windows LDAP API
+  - Legitimate management tools not in the filter list
+level: medium

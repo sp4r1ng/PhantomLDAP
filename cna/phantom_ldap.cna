@@ -1,0 +1,288 @@
+# phantom_ldap.cna
+#
+# PhantomLDAP — Main Cobalt Strike Aggressor Script
+#
+# Registers all PhantomLDAP BOF commands in Cobalt Strike's command parser.
+# Load this script via: Cobalt Strike → Script Manager → Load
+#
+# Dependencies: helpers.cna, menus.cna (auto-sourced by this script)
+#
+# Version: 1.0.0
+# Author:  PhantomLDAP Project
+#
+
+# ============================================================================
+# Bootstrap — source companion scripts
+# ============================================================================
+
+local('%script_dir');
+%script_dir = script_resource("");
+
+source(script_resource("helpers.cna"));
+source(script_resource("menus.cna"));
+
+# ============================================================================
+# Helper: resolve the BOF directory path
+# ============================================================================
+
+sub phantom_bof_path {
+    local('$bof');
+    $bof = script_resource("../build/" . $1 . ".o");
+    if (!-exists $bof) {
+        # Fallback: look in same dir as cna/
+        $bof = script_resource($1 . ".o");
+    }
+    return $bof;
+}
+
+# ============================================================================
+# Helper: execute a BOF on a set of beacons with packed args
+# ============================================================================
+
+sub phantom_exec_bof {
+    local('$bid $module $args @bids');
+    ($bid, $module, $args) = @_;
+    local('$bof_path');
+    $bof_path = phantom_bof_path($module);
+
+    if (!-exists $bof_path) {
+        berror($bid, "[PhantomLDAP] BOF not found: $bof_path\nRun 'make' to compile first.");
+        return;
+    }
+
+    beacon_execute_bof($bid, $bof_path, $args);
+}
+
+# ============================================================================
+# bof_enum_admins — Enumerate adminCount=1 accounts
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_admins",
+    "Enumerate AdminSDHolder-protected accounts (adminCount=1)",
+    "Usage: bof_enum_admins [dc_hostname]\n\n" .
+    "Enumerates all user accounts protected by AdminSDHolder (adminCount=1).\n" .
+    "Includes UAC analysis, password age, delegation flags, and SID output.\n\n" .
+    "Arguments:\n" .
+    "  dc_hostname  (optional) Target DC FQDN. Auto-discovers if omitted.\n\n" .
+    "Examples:\n" .
+    "  bof_enum_admins\n" .
+    "  bof_enum_admins dc01.corp.local"
+);
+
+alias bof_enum_admins {
+    local('$bid $dc $args');
+    $bid = $1;
+    $dc  = $2 ? $2 : "";
+
+    $args = bof_pack($bid, "Z", $dc);
+    phantom_exec_bof($bid, "enum_admins", $args);
+}
+
+# ============================================================================
+# bof_enum_spn — Enumerate Kerberoastable accounts
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_spn",
+    "Enumerate Kerberoastable accounts (SPN holders) for offline cracking",
+    "Usage: bof_enum_spn [dc_hostname]\n\n" .
+    "Finds enabled user accounts with registered Service Principal Names (SPNs).\n" .
+    "These accounts can have TGS tickets requested and cracked offline.\n\n" .
+    "Arguments:\n" .
+    "  dc_hostname  (optional) Target DC FQDN.\n\n" .
+    "Examples:\n" .
+    "  bof_enum_spn\n" .
+    "  bof_enum_spn dc01.corp.local"
+);
+
+alias bof_enum_spn {
+    local('$bid $dc $args');
+    $bid = $1;
+    $dc  = $2 ? $2 : "";
+
+    $args = bof_pack($bid, "Z", $dc);
+    phantom_exec_bof($bid, "enum_spn", $args);
+}
+
+# ============================================================================
+# bof_enum_asrep — Enumerate AS-REP Roastable accounts
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_asrep",
+    "Enumerate AS-REP Roastable accounts (DONT_REQUIRE_PREAUTH)",
+    "Usage: bof_enum_asrep [dc_hostname]\n\n" .
+    "Finds accounts with Kerberos pre-authentication disabled.\n" .
+    "AS-REP can be requested without credentials and cracked offline.\n\n" .
+    "Examples:\n" .
+    "  bof_enum_asrep\n" .
+    "  bof_enum_asrep dc01.corp.local"
+);
+
+alias bof_enum_asrep {
+    local('$bid $dc $args');
+    $bid = $1;
+    $dc  = $2 ? $2 : "";
+
+    $args = bof_pack($bid, "Z", $dc);
+    phantom_exec_bof($bid, "enum_asrep", $args);
+}
+
+# ============================================================================
+# bof_enum_computers — Enumerate computer objects
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_computers",
+    "Enumerate computer objects with OS analysis and staleness detection",
+    "Usage: bof_enum_computers [dc_hostname]\n\n" .
+    "Retrieves all computer accounts. Flags legacy OS (XP, 2003, 2008,\n" .
+    "Win7/8) and stale machines (no logon >90 days).\n\n" .
+    "Examples:\n" .
+    "  bof_enum_computers\n" .
+    "  bof_enum_computers dc01.corp.local"
+);
+
+alias bof_enum_computers {
+    local('$bid $dc $args');
+    $bid = $1;
+    $dc  = $2 ? $2 : "";
+
+    $args = bof_pack($bid, "Z", $dc);
+    phantom_exec_bof($bid, "enum_computers", $args);
+}
+
+# ============================================================================
+# bof_enum_trusts — Enumerate domain trusts
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_trusts",
+    "Enumerate domain trust relationships (inbound/outbound/bidirectional)",
+    "Usage: bof_enum_trusts [dc_hostname]\n\n" .
+    "Enumerates all trustedDomain objects, decoding trust type,\n" .
+    "direction, transitivity, SID filtering, and attack paths.\n\n" .
+    "Examples:\n" .
+    "  bof_enum_trusts\n" .
+    "  bof_enum_trusts dc01.corp.local"
+);
+
+alias bof_enum_trusts {
+    local('$bid $dc $args');
+    $bid = $1;
+    $dc  = $2 ? $2 : "";
+
+    $args = bof_pack($bid, "Z", $dc);
+    phantom_exec_bof($bid, "enum_trusts", $args);
+}
+
+# ============================================================================
+# bof_enum_gpo — Enumerate Group Policy Objects
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_gpo",
+    "Enumerate Group Policy Objects and linked containers",
+    "Usage: bof_enum_gpo [dc_hostname]\n\n" .
+    "Enumerates all GPOs (groupPolicyContainer objects), displaying\n" .
+    "name, GUID, file system path (gPCFileSysPath), and link targets.\n\n" .
+    "Examples:\n" .
+    "  bof_enum_gpo\n" .
+    "  bof_enum_gpo dc01.corp.local"
+);
+
+alias bof_enum_gpo {
+    local('$bid $dc $args');
+    $bid = $1;
+    $dc  = $2 ? $2 : "";
+
+    $args = bof_pack($bid, "Z", $dc);
+    phantom_exec_bof($bid, "enum_gpo", $args);
+}
+
+# ============================================================================
+# bof_enum_acl — Full DACL binary analysis on a target object
+# ============================================================================
+
+beacon_command_register(
+    "bof_enum_acl",
+    "Parse and analyze DACL of an AD object (full binary ACE decoding)",
+    "Usage: bof_enum_acl <distinguishedName> [dc_hostname]\n\n" .
+    "Retrieves the nTSecurityDescriptor attribute of the target object\n" .
+    "and fully parses all ACEs. Identifies DCSync rights, WriteDACL,\n" .
+    "WriteOwner, ForceChangePassword, RBCD write, and other abusable ACEs.\n\n" .
+    "Arguments:\n" .
+    "  distinguishedName  Full DN of the target object (required)\n" .
+    "  dc_hostname        (optional) DC to query\n\n" .
+    "Examples:\n" .
+    "  bof_enum_acl \"CN=Domain Admins,CN=Users,DC=corp,DC=local\"\n" .
+    "  bof_enum_acl \"DC=corp,DC=local\" dc01.corp.local"
+);
+
+alias bof_enum_acl {
+    local('$bid $dn $dc $args');
+    $bid = $1;
+    $dn  = $2 ? $2 : "";
+    $dc  = $3 ? $3 : "";
+
+    if ($dn eq "") {
+        berror($bid, "Usage: bof_enum_acl <distinguishedName> [dc_hostname]");
+        return;
+    }
+
+    $args = bof_pack($bid, "ZZ", $dn, $dc);
+    phantom_exec_bof($bid, "enum_acl", $args);
+}
+
+# ============================================================================
+# bof_ldap_query — Custom LDAP query
+# ============================================================================
+
+beacon_command_register(
+    "bof_ldap_query",
+    "Execute a custom LDAP filter and display results",
+    "Usage: bof_ldap_query <filter> [attrs] [dc_hostname] [scope] [base_dn]\n\n" .
+    "Executes an arbitrary LDAP filter and returns results. Useful for\n" .
+    "targeted queries or validating filters before running full modules.\n\n" .
+    "Arguments:\n" .
+    "  filter       LDAP filter string (required)\n" .
+    "  attrs        Comma-separated attribute list (optional, default: common attrs)\n" .
+    "  dc_hostname  DC FQDN (optional)\n" .
+    "  scope        0=BASE, 1=ONELEVEL, 2=SUBTREE (default: 2)\n" .
+    "  base_dn      Custom search base (optional)\n\n" .
+    "Examples:\n" .
+    "  bof_ldap_query \"(&(objectClass=computer)(operatingSystem=*2003*))\"\n" .
+    "  bof_ldap_query \"(sAMAccountName=john)\" \"mail,pwdLastSet,memberOf\"\n" .
+    "  bof_ldap_query \"(objectClass=*)\" \"\" dc01.corp.local 0 \"DC=corp,DC=local\""
+);
+
+alias bof_ldap_query {
+    local('$bid $filter $attrs $dc $scope $base $args');
+    $bid    = $1;
+    $filter = $2 ? $2 : "";
+    $attrs  = $3 ? $3 : "";
+    $dc     = $4 ? $4 : "";
+    $scope  = $5 ? short($5) : 2s;
+    $base   = $6 ? $6 : "";
+
+    if ($filter eq "") {
+        berror($bid, "Usage: bof_ldap_query <filter> [attrs] [dc] [scope] [base_dn]");
+        return;
+    }
+
+    $args = bof_pack($bid, "ZZZsZ", $filter, $attrs, $dc, $scope, $base);
+    phantom_exec_bof($bid, "ldap_query", $args);
+}
+
+# ============================================================================
+# Startup Banner
+# ============================================================================
+
+on ready {
+    println("\n[PhantomLDAP] v1.0.0 loaded — BOF directory: " . script_resource("../build/"));
+    println("[PhantomLDAP] Commands: bof_enum_admins | bof_enum_spn | bof_enum_asrep");
+    println("[PhantomLDAP]          bof_enum_computers | bof_enum_trusts | bof_enum_gpo");
+    println("[PhantomLDAP]          bof_enum_acl | bof_ldap_query");
+    println("[PhantomLDAP] Use 'help bof_<command>' for detailed usage.\n");
+}

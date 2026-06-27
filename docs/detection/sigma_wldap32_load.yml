@@ -1,0 +1,48 @@
+title: wldap32.dll Image Load in Unexpected Process
+id: b5e2d3f1-9c4a-4b2e-8d1f-3e8c6b7a2f1d
+status: experimental
+description: |
+  Detects the loading of wldap32.dll (native Windows LDAP client library)
+  into processes that have no business performing LDAP queries. BOF-based
+  tools like PhantomLDAP trigger wldap32.dll load if it is not already
+  present in the target process's module list (when the target injected
+  process does not already use LDAP).
+author: PhantomLDAP Detection Project
+date: 2024-01-15
+modified: 2024-06-01
+references:
+  - https://attack.mitre.org/techniques/T1055/
+  - https://github.com/PhantomLDAP/PhantomLDAP
+tags:
+  - attack.discovery
+  - attack.t1087.002
+  - attack.defense_evasion
+  - attack.t1055
+logsource:
+  product: windows
+  category: image_load
+  service: sysmon
+detection:
+  selection:
+    EventID: 7
+    ImageLoaded|endswith: '\wldap32.dll'
+  filter_known_legitimate:
+    Image|contains:
+      - '\mmc.exe'
+      - '\explorer.exe'
+      - '\outlook.exe'
+      - '\ADWS.exe'
+      - '\powershell.exe'
+      - '\LDP.exe'
+      - '\svchost.exe'
+      - '\SearchHost.exe'
+      - '\taskhostw.exe'
+      - '\dsquery.exe'
+      - '\dsget.exe'
+      - '\nltest.exe'
+      - '\wbemtest.exe'
+  condition: selection and not filter_known_legitimate
+falsepositives:
+  - LDAP-enabled third-party applications not in the whitelist
+  - Developer tools testing LDAP connectivity
+level: high
