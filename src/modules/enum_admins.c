@@ -146,10 +146,11 @@ static BOOL enum_admins_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PVOID
     } else {
         char pwd_combined[128];
         char *p = pwd_combined, *e = pwd_combined + sizeof(pwd_combined) - 1;
-        while (*pwd_str && p < e) *p++ = *pwd_str++;
+        const char *src = pwd_str;
+        while (*src && p < e) *p++ = *src++;
         *p++ = ' '; *p++ = '(';
-        const char *age_p = pwd_age;
-        while (*age_p && p < e) *p++ = *age_p++;
+        src = pwd_age;
+        while (*src && p < e) *p++ = *src++;
         *p++ = ')'; *p = '\0';
         phantom_print_kv("Pwd Set",    pwd_combined,  4);
     }
@@ -159,10 +160,11 @@ static BOOL enum_admins_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PVOID
     } else {
         char logon_combined[128];
         char *p = logon_combined, *e = logon_combined + sizeof(logon_combined) - 1;
-        while (*logon_str && p < e) *p++ = *logon_str++;
+        const char *src = logon_str;
+        while (*src && p < e) *p++ = *src++;
         *p++ = ' '; *p++ = '(';
-        const char *age_p = logon_age;
-        while (*age_p && p < e) *p++ = *age_p++;
+        src = logon_age;
+        while (*src && p < e) *p++ = *src++;
         *p++ = ')'; *p = '\0';
         phantom_print_kv("Last Logon", logon_combined, 4);
     }
@@ -218,7 +220,6 @@ static BOOL enum_admins_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PVOID
                 (unsigned long)days_old);
     }
 
-cleanup:
     if (sam_vals)  api->ldap_value_free(sam_vals);
     if (dn_vals)   api->ldap_value_free(dn_vals);
     if (uac_vals)  api->ldap_value_free(uac_vals);

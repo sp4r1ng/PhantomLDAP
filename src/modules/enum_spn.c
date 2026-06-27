@@ -171,7 +171,6 @@ static BOOL enum_spn_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PVOID us
         BeaconPrintf(CALLBACK_OUTPUT,
             "    [!] CONSTRAINED DELEGATION (S4U2Proxy) — potential impersonation path\n");
 
-cleanup:
     if (sam_vals)   api->ldap_value_free(sam_vals);
     if (dn_vals)    api->ldap_value_free(dn_vals);
     if (spn_vals)   api->ldap_value_free(spn_vals);

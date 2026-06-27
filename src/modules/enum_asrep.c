@@ -136,7 +136,6 @@ static BOOL enum_asrep_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PVOID 
         BeaconPrintf(CALLBACK_OUTPUT,
             "    [!!] UNCONSTRAINED DELEGATION + AS-REP = CRITICAL TARGET!\n");
 
-cleanup:
     if (sam_vals)   api->ldap_value_free(sam_vals);
     if (dn_vals)    api->ldap_value_free(dn_vals);
     if (uac_vals)   api->ldap_value_free(uac_vals);

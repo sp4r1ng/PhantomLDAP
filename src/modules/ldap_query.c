@@ -71,7 +71,7 @@ static BOOL ldap_query_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PVOID 
         /* Fall back to binary (berval) values */
         PLDAP_BERVAL *bin_vals = api->ldap_get_values_len(ctx->ldap_handle, entry, state->attrs[ai]);
         if (bin_vals && bin_vals[0]) {
-            ULONG cnt = api->ldap_count_values_len(bin_vals);
+            (void)api->ldap_count_values_len(bin_vals);
             /* Special handling for known binary attributes */
             if (attr_name[0]=='o'&&attr_name[1]=='b'&&attr_name[2]=='j'&&
                 attr_name[7]=='S'&&attr_name[8]=='i'&&attr_name[9]=='d') {

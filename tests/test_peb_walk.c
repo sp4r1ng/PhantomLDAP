@@ -44,17 +44,19 @@
 /* PhantomLDAP headers */
 #include "../include/win_types.h"
 #include "../include/dynamic_resolve.h"
-#include "../include/beacon.h"          /* BeaconPrintf stub below */
 
-/* =========================================================================
- * BeaconPrintf stub — required because dynamic_resolve.c calls it on error
- * ========================================================================= */
+#include "../include/beacon.h"
+
+/* Mock Beacon API for standalone testing */
+#include <stdarg.h>
+
 void BeaconPrintf(int type, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vprintf(fmt, args);
     va_end(args);
 }
+void (*__imp_BeaconPrintf)(int, const char*, ...) = BeaconPrintf;
 void BeaconDataParse(datap *parser, char *buffer, int size) {
     parser->original = buffer;
     parser->buffer   = buffer;

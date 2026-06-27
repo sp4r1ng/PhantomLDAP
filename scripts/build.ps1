@@ -1,5 +1,5 @@
-# Build script for Windows (PowerShell)
-# PhantomLDAP — PowerShell Build Script
+﻿# Build script for Windows (PowerShell)
+# PhantomLDAP â€” PowerShell Build Script
 # 
 # This script cross-compiles PhantomLDAP BOF modules on Windows using
 # either a locally installed MinGW-w64 toolchain or Windows Subsystem
@@ -228,10 +228,3 @@ if ($UseWSL) {
         Invoke-Build-Native -GCC $gcc -LD $ld
     }
 }
-
-Write-Host ""
-Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " Build Complete — BOF files in .\build\" -ForegroundColor Cyan
-Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Info "Load .\cna\phantom_ldap.cna in Cobalt Strike to use."

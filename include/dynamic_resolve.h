@@ -48,56 +48,56 @@ extern "C" {
  * Algorithm: djb2 (hash * 33 + c, seed = 5381, case-insensitive)
  * ========================================================================= */
 
-#define PHANTOM_HASH_WLDAP32        0xEEE845E3UL    /**< djb2("wldap32.dll")    */
-#define PHANTOM_HASH_KERNEL32       0x6DDB9555UL    /**< djb2("kernel32.dll")   */
-#define PHANTOM_HASH_NTDLL          0x3CFA685DUL    /**< djb2("ntdll.dll")      */
-#define PHANTOM_HASH_NETAPI32       0x4E0A8F69UL    /**< djb2("netapi32.dll")   */
+#define PHANTOM_HASH_WLDAP32                               0xCB9A778CUL    /**< djb2("wldap32.dll")    */
+#define PHANTOM_HASH_KERNEL32                              0x7040EE75UL    /**< djb2("kernel32.dll")   */
+#define PHANTOM_HASH_NTDLL                                 0x22D3B5EDUL    /**< djb2("ntdll.dll")      */
+#define PHANTOM_HASH_NETAPI32                              0x60C3DB35UL    /**< djb2("netapi32.dll")   */
 
 /* =========================================================================
  * Pre-computed DJB2 Hashes — wldap32.dll Exports (case-sensitive)
  * ========================================================================= */
 
-#define PHANTOM_HASH_ldap_initW                  0xB22A5F32UL
-#define PHANTOM_HASH_ldap_set_option             0x2F4E16D5UL
-#define PHANTOM_HASH_ldap_get_option             0xB9C8F4A1UL
-#define PHANTOM_HASH_ldap_connect                0xE47B31C0UL
-#define PHANTOM_HASH_ldap_bind_sW                0x9D8C5A71UL
-#define PHANTOM_HASH_ldap_unbind                 0x7F3D2E94UL
-#define PHANTOM_HASH_ldap_search_ext_sW          0xC15A8F60UL
-#define PHANTOM_HASH_ldap_count_entries          0xA3E24B18UL
-#define PHANTOM_HASH_ldap_first_entry            0x58F71C43UL
-#define PHANTOM_HASH_ldap_next_entry             0x6D4A0E27UL
-#define PHANTOM_HASH_ldap_get_valuesW            0xF8C93D06UL
-#define PHANTOM_HASH_ldap_get_values_lenW        0x3B7EA154UL
-#define PHANTOM_HASH_ldap_count_valuesW          0xDAB35E29UL
-#define PHANTOM_HASH_ldap_count_values_len       0x1F6C8A73UL
-#define PHANTOM_HASH_ldap_value_freeW            0x87D14C5EUL
-#define PHANTOM_HASH_ldap_value_free_len         0x4590F21AUL
-#define PHANTOM_HASH_ldap_msgfree                0xE2B7A43CUL
-#define PHANTOM_HASH_ldap_get_dnW                0x93F51B8DUL
-#define PHANTOM_HASH_ldap_memfreeW               0x26C40E62UL
-#define PHANTOM_HASH_ldap_first_attributeW       0xBD785F30UL
-#define PHANTOM_HASH_ldap_next_attributeW        0xC2E49A17UL
-#define PHANTOM_HASH_ber_free                    0x4A3F1C95UL
-#define PHANTOM_HASH_ldap_create_page_controlW   0x78E2D50FUL
-#define PHANTOM_HASH_ldap_parse_page_controlW    0x59B4F83AUL
-#define PHANTOM_HASH_ldap_parse_resultW          0x8D36C175UL
-#define PHANTOM_HASH_ldap_controls_freeA         0xF10A4E29UL
-#define PHANTOM_HASH_ldap_err2stringW            0x3E79B04CUL
+#define PHANTOM_HASH_ldap_initW                            0x826FBB90UL
+#define PHANTOM_HASH_ldap_set_option                       0x0AE24289UL
+#define PHANTOM_HASH_ldap_get_option                       0xDA6374FDUL
+#define PHANTOM_HASH_ldap_connect                          0x121C14AFUL
+#define PHANTOM_HASH_ldap_bind_sW                          0xB71D50CBUL
+#define PHANTOM_HASH_ldap_unbind                           0xEC611305UL
+#define PHANTOM_HASH_ldap_search_ext_sW                    0x11EDAC34UL
+#define PHANTOM_HASH_ldap_count_entries                    0xB1182BE7UL
+#define PHANTOM_HASH_ldap_first_entry                      0x95FA451EUL
+#define PHANTOM_HASH_ldap_next_entry                       0xD21F0995UL
+#define PHANTOM_HASH_ldap_get_valuesW                      0x1E22036BUL
+#define PHANTOM_HASH_ldap_get_values_lenW                  0x9DC97A09UL
+#define PHANTOM_HASH_ldap_count_valuesW                    0xAED3F654UL
+#define PHANTOM_HASH_ldap_count_values_len                 0x290C81BBUL
+#define PHANTOM_HASH_ldap_value_freeW                      0x66748CFAUL
+#define PHANTOM_HASH_ldap_value_free_len                   0x8F485EA1UL
+#define PHANTOM_HASH_ldap_msgfree                          0x1CB43FAEUL
+#define PHANTOM_HASH_ldap_get_dnW                          0x2F15C7CDUL
+#define PHANTOM_HASH_ldap_memfreeW                         0x8B8BD6FDUL
+#define PHANTOM_HASH_ldap_first_attributeW                 0x28C583D7UL
+#define PHANTOM_HASH_ldap_next_attributeW                  0xE41AAAAEUL
+#define PHANTOM_HASH_ber_free                              0x5C7DD0DFUL
+#define PHANTOM_HASH_ldap_create_page_controlW             0x0C9424CCUL
+#define PHANTOM_HASH_ldap_parse_page_controlW              0xEC8443D3UL
+#define PHANTOM_HASH_ldap_parse_resultW                    0x9016E655UL
+#define PHANTOM_HASH_ldap_controls_freeA                   0xA233BCFBUL
+#define PHANTOM_HASH_ldap_err2stringW                      0x1D301AEEUL
 
 /* =========================================================================
  * Pre-computed DJB2 Hashes — kernel32.dll Exports
  * ========================================================================= */
 
-#define PHANTOM_HASH_HeapAlloc          0x32C670D0UL
-#define PHANTOM_HASH_HeapFree           0x4862531AUL
-#define PHANTOM_HASH_HeapReAlloc        0x9B4A23E5UL
-#define PHANTOM_HASH_GetProcessHeap     0xA4B3DC17UL
-#define PHANTOM_HASH_LoadLibraryW       0x5B97F043UL
-#define PHANTOM_HASH_GetProcAddress     0xC2E18A6FUL
-#define PHANTOM_HASH_WideCharToMultiByte 0xE6831D20UL
-#define PHANTOM_HASH_MultiByteToWideChar 0x3F7C58B4UL
-#define PHANTOM_HASH_lstrlenW           0xD14A5E92UL
+#define PHANTOM_HASH_HeapAlloc                             0x1FFD670EUL
+#define PHANTOM_HASH_HeapFree                              0x374893C5UL
+#define PHANTOM_HASH_HeapReAlloc                           0x1E31C125UL
+#define PHANTOM_HASH_GetProcessHeap                        0xC6580D02UL
+#define PHANTOM_HASH_LoadLibraryW                          0x5FBFF111UL
+#define PHANTOM_HASH_GetProcAddress                        0xCF31BB1FUL
+#define PHANTOM_HASH_WideCharToMultiByte                   0xE65D31CEUL
+#define PHANTOM_HASH_MultiByteToWideChar                   0xE2FDDA8EUL
+#define PHANTOM_HASH_lstrlenW                              0xD2C4AB20UL
 
 /* =========================================================================
  * DJB2 Hash Function

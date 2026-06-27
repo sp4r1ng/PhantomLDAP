@@ -16,6 +16,12 @@
 #ifndef PHANTOM_WIN_TYPES_H
 #define PHANTOM_WIN_TYPES_H
 
+#ifndef DECLSPEC_IMPORT
+#define DECLSPEC_IMPORT __declspec(dllimport)
+#endif
+
+typedef __builtin_va_list va_list;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,15 +53,15 @@ typedef long                HRESULT;
 typedef unsigned long       DWORD;
 typedef unsigned long long  DWORD64;
 
-typedef wchar_t             WCHAR;
+typedef unsigned short      WCHAR;
 typedef char               *PSTR;
 typedef char               *LPSTR;
 typedef const char         *PCSTR;
 typedef const char         *LPCSTR;
-typedef wchar_t            *PWSTR;
-typedef wchar_t            *LPWSTR;
-typedef const wchar_t      *PCWSTR;
-typedef const wchar_t      *LPCWSTR;
+typedef unsigned short     *PWSTR;
+typedef unsigned short     *LPWSTR;
+typedef const unsigned short *PCWSTR;
+typedef const unsigned short *LPCWSTR;
 
 typedef void               *PVOID;
 typedef void               *LPVOID;

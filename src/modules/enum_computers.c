@@ -227,7 +227,6 @@ static BOOL enum_computers_callback(PPHANTOM_CONTEXT ctx, PLDAPMessage entry, PV
             "    [*] Try:   CrackMapExec smb %s -u administrator -p 'Welcome1'\n",
             dns_str[0] ? dns_str : sam_str);
 
-cleanup:
     if (dns_vals)  api->ldap_value_free(dns_vals);
     if (sam_vals)  api->ldap_value_free(sam_vals);
     if (dn_vals)   api->ldap_value_free(dn_vals);

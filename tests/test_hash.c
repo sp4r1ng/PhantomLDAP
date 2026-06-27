@@ -32,6 +32,17 @@
  * Test Framework (minimal, zero-dependency)
  * ========================================================================= */
 
+/* Mock Beacon API for standalone testing */
+#include <stdarg.h>
+void BeaconPrintf(int type, const char* fmt, ...) {
+    (void)type;
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+}
+void (*__imp_BeaconPrintf)(int, const char*, ...) = BeaconPrintf;
+
 static int g_pass = 0;
 static int g_fail = 0;
 static int g_total = 0;
@@ -254,8 +265,8 @@ static void test_djb2_empty_string(void) {
                   ref_djb2("", 0));
 
     /* Single character */
-    ASSERT_EQ_U32("djb2(\"a\") == 177638",
-                  177638,
+    ASSERT_EQ_U32("djb2(\"a\") == 177670",
+                  177670,
                   ref_djb2("a", 0));
 
     /* Case insensitivity */

@@ -42,13 +42,6 @@ static char *append_str(char *p, char *end, const char *s) {
     while (*s && p < end) *p++ = *s++;
     return p;
 }
-
-/** Zero-fill a buffer */
-static void phantom_bzero(void *buf, SIZE_T n) {
-    volatile char *p = (volatile char *)buf;
-    while (n--) *p++ = 0;
-}
-
 /** Manual memcmp */
 static int phantom_memcmp(const void *a, const void *b, SIZE_T n) {
     const unsigned char *pa = (const unsigned char *)a;
@@ -59,13 +52,6 @@ static int phantom_memcmp(const void *a, const void *b, SIZE_T n) {
         pa++; pb++;
     }
     return 0;
-}
-
-/** Wide-string length */
-static SIZE_T phantom_wcslen(const WCHAR *s) {
-    SIZE_T n = 0;
-    while (s && *s++) n++;
-    return n;
 }
 
 /* =========================================================================
@@ -185,7 +171,7 @@ void phantom_filetime_to_str(LONGLONG ft, char *buf, SIZE_T buf_size) {
 
     /* Gregorian calendar calculation */
     unsigned long long z   = days + 719468ULL;
-    unsigned long long era = (z >= 0 ? z : z - 146096ULL) / 146097ULL;
+    unsigned long long era = z / 146097ULL;
     unsigned long long doe = z - era * 146097ULL;
     unsigned long long yoe = (doe - doe/1460ULL + doe/36524ULL - doe/146096ULL) / 365ULL;
     unsigned long long y   = yoe + era * 400ULL;

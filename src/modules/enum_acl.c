@@ -726,7 +726,6 @@ static void parse_security_descriptor(
     PACL  dacl;
     WORD  ace_count;
     DACL_STATS stats;
-    PBYTE      ace_ptr;
     WORD       ace_idx;
     DWORD      interesting_threshold = ACE_INTEREST_MEDIUM;
 
