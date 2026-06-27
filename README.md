@@ -4,13 +4,13 @@
 
 **Advanced OpSec-Safe Active Directory Enumeration BOF Suite**
 
-[![CI — Cross-Compile](https://github.com/PhantomLDAP/PhantomLDAP/actions/workflows/build.yml/badge.svg)](https://github.com/PhantomLDAP/PhantomLDAP/actions/workflows/build.yml)
+[![CI — Cross-Compile](https://github.com/sp4r1ng/PhantomLDAP/actions/workflows/build.yml/badge.svg)](https://github.com/sp4r1ng/PhantomLDAP/actions/workflows/build.yml)
 [![Language](https://img.shields.io/badge/Language-C%20%2F%20C99-00599C?logo=c&logoColor=white)](https://en.cppreference.com/w/c)
-[![Platform](https://img.shields.io/badge/Platform-x86__64%20Windows-0078D6?logo=windows&logoColor=white)](https://github.com/PhantomLDAP/PhantomLDAP)
+[![Platform](https://img.shields.io/badge/Platform-x86__64%20Windows-0078D6?logo=windows&logoColor=white)](https://github.com/sp4r1ng/PhantomLDAP)
 [![Framework](https://img.shields.io/badge/Framework-Cobalt%20Strike%204.x-red?logo=target&logoColor=white)](https://www.cobaltstrike.com/)
 [![Build](https://img.shields.io/badge/Build-MinGW--w64-brightgreen?logo=gnu&logoColor=white)](https://www.mingw-w64.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blueviolet)](https://github.com/PhantomLDAP/PhantomLDAP/releases)
+[![Version](https://img.shields.io/badge/Version-1.0.0-blueviolet)](https://github.com/sp4r1ng/PhantomLDAP/releases)
 
 *Zero-import · PEB-walk API resolution · Paginated LDAP · In-memory DACL parsing · No CLR · No Fork & Run*
 
@@ -213,7 +213,7 @@ PhantomLDAP/
 sudo apt-get update && sudo apt-get install -y mingw-w64
 
 # Clone the repository
-git clone https://github.com/PhantomLDAP/PhantomLDAP.git
+git clone https://github.com/sp4r1ng/PhantomLDAP.git
 cd PhantomLDAP
 
 # Build all modules
